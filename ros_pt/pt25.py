@@ -112,6 +112,12 @@ class pt25:
             self.send(address+'f')
             time.sleep(POLL_DELAY)
             data = self.read().strip()
+            #data = data.decode('utf-8')
+
+            # # Remove 'Af' from the beginning of the data if it exists
+            # if data.startswith(b'Af'):
+            #     data = data[2:]
+
             if data.__len__() < 3:
                 print('Response too short: %s' % data)
                 return -1
@@ -139,12 +145,13 @@ class pt25:
         self.last_command = time.time()
         print('tx: %s' % tx_str)
         for character in tx_str:
-            self.ser.write(character)
+            self.ser.write(character.encode('utf-8'))
             time.sleep(CHAR_DELAY)
 
     def read(self):
         try:
             data = self.ser.readline()
+            data = data.decode('utf-8')
         except:
             data = ''
             print('Failed to read from serial.')

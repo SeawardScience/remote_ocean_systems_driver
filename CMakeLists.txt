@@ -1,20 +1,26 @@
-cmake_minimum_required(VERSION 2.8.3)
-project(pt25)
+cmake_minimum_required(VERSION 3.5)
+project(ros_pt)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+find_package(ament_cmake REQUIRED)
+find_package(rclpy REQUIRED)
 
-## Find catkin macros and libraries
-## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
-## is used, also find other catkin packages
-find_package(catkin REQUIRED COMPONENTS
-  message_generation
-  geometry_msgs
-  rospy
-  sensor_msgs
-  std_msgs
+# Add the directory containing your Python package
+ament_python_install_package(${PROJECT_NAME})
+
+install(
+  DIRECTORY config launch
+  DESTINATION share/${PROJECT_NAME}
 )
 
-generate_messages(DEPENDENCIES std_msgs)
+# Install your Python scripts
+install(PROGRAMS
+  python/ros_driver.py  # Make sure to include the .py extension
+  DESTINATION lib/${PROJECT_NAME}
+)
 
-catkin_package(CATKIN_DEPENDS message_runtime std_msgs)
+if(BUILD_TESTING)
+  find_package(ament_lint_auto REQUIRED)
+  ament_lint_auto_find_test_dependencies()
+endif()
+
+ament_package()
