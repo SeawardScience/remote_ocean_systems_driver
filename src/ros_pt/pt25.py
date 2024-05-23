@@ -4,8 +4,8 @@ import serial, select, time, math
 SERIAL_TIMEOUT = 0.1
 ADDRESSES = ('A', 'B')
 #DT = 0.5
-POLL_DELAY = 0.001
-CHAR_DELAY = 0.003
+POLL_DELAY = 0.01
+CHAR_DELAY = 0.01
 COMMAND_DELAY = 0.1
 
 class pt25:
@@ -50,6 +50,10 @@ class pt25:
         else:
             print('Invalid address: %s' % address)
 
+    def stop(self, address):
+        time.sleep(POLL_DELAY*4)
+        self.send(address + 's128')
+        time.sleep(POLL_DELAY*4)
     def set(self, address, position):
         if address in ADDRESSES:
             # Formula only valid from 1 to 359.5.
@@ -67,6 +71,7 @@ class pt25:
                 print('Position out of bounds: %.3f' % position)
                 return -1
             print('Moving to position %.3f (counts: %d)' % (position, counts))
+            time.sleep(POLL_DELAY*4)
             self.send(address+'p'+str(int(counts)).zfill(3))
             time.sleep(POLL_DELAY)
             self.read()
@@ -143,7 +148,7 @@ class pt25:
         if time.time() < self.last_command + COMMAND_DELAY:
             time.sleep(max(0., (self.last_command + COMMAND_DELAY) - time.time()))
         self.last_command = time.time()
-        print('tx: %s' % tx_str)
+        #print('tx: %s' % tx_str)
         for character in tx_str:
             self.ser.write(character.encode('utf-8'))
             time.sleep(CHAR_DELAY)
@@ -155,7 +160,7 @@ class pt25:
         except:
             data = ''
             print('Failed to read from serial.')
-        print('rx: %s' % data)
+        #print('rx: %s' % data)
         return(data)
 
     def spin_once(self):

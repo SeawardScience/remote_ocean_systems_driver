@@ -34,7 +34,7 @@ class PT25ROS(Node):
     def get_params(self):
         self.declare_parameter('port', '/dev/ttyUSB0')
         self.declare_parameter('baudrate', 9600)
-        self.declare_parameter('poll_rate', 2.0)
+        self.declare_parameter('poll_rate', 5.0)
         self.declare_parameter('min_cmd_delay', 1.0)
 
         self.declare_parameter('roll_topic', 'pos/addr_a')
@@ -58,6 +58,7 @@ class PT25ROS(Node):
 
     def roll_cmd_cb(self, msg):
         self.last_roll_cmd = msg.header.stamp
+        self.pt25.stop('A')
         self.pt25.set('A', msg.position[0] * 180. / math.pi)
 
     def poll_callback(self):
