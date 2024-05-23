@@ -2,8 +2,11 @@
 
 <launch>
 
-  <node pkg="ros_pt" exec="ros_driver.py" name="ros_pt" output="screen">
-    <!-- <param from="$(find-pkg-share herc_ui)/config/param_test.yaml"/> -->
+  <arg name="vessel_ns"       default="herc"/>
+  <arg name="vessel_config"   default="herc"/>
+
+  <node pkg="ros_pt" exec="ros_driver.py" name="ros_pt" namespace="$(var vessel_ns)/control/$(var valve_pack_name)" output="screen">
+    <param from="$(find-pkg-share ros_pt)/config/ros_pt.yaml"/>
   </node>
 
 </launch>

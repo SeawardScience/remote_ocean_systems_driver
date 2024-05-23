@@ -1,0 +1,4 @@
+/**:
+  ros_pt:
+    port: /dev/ttyUSB0
+    baudrate: 9600

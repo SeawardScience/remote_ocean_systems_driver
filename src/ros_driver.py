@@ -37,9 +37,9 @@ class PT25ROS(Node):
         self.declare_parameter('poll_rate', 5.0)
         self.declare_parameter('min_cmd_delay', 1.0)
 
-        self.declare_parameter('roll_topic', 'pos/addr_a')
-        self.declare_parameter('roll_cmd_topic', 'cmd/addr_a')
-        self.declare_parameter('roll_frame', 'pt_axis_as')
+        self.declare_parameter('roll_topic', '~/pos/addr_a')
+        self.declare_parameter('roll_cmd_topic', '~/cmd/addr_a')
+        self.declare_parameter('roll_frame', 'pt_axis_a')
 
         self.port = self.get_parameter('port').get_parameter_value().string_value
         self.baudrate = self.get_parameter('baudrate').get_parameter_value().integer_value

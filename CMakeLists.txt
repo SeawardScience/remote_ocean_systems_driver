@@ -13,5 +13,13 @@ install(PROGRAMS
   src/ros_driver.py
   DESTINATION lib/${PROJECT_NAME})
 
+# Install launch files
+install(DIRECTORY launch
+  DESTINATION share/${PROJECT_NAME})
+
+# Install configuration files
+install(DIRECTORY config
+  DESTINATION share/${PROJECT_NAME})
+
 # Register the node with ament
 ament_package()
