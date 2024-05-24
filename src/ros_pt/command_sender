@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+import rospy, math
+from sensor_msgs.msg import JointState
+
+class pt25sender:
+    def __init__(self):
+        rospy.init_node('pt25_sender')
+        self.node_name = rospy.get_name()
+        self.get_params()
+
+        self.init_publishers()
+
+    def get_params(self):
+        self.pitch_cmd_topic = rospy.get_param('~pitch_cmd_topic', 'pt25_pitch_cmd')
+        self.pitch_frame = rospy.get_param('~pitch_frame', 'pt25_pitch')
+        self.roll_cmd_topic = rospy.get_param('~roll_cmd_topic', 'pt25_roll_cmd')
+        self.roll_frame = rospy.get_param('~roll_frame', 'pt25_roll')
+
+    def init_publishers(self):
+        self.pitch_msg = JointState()
+        self.pitch_pub = rospy.Publisher(self.pitch_cmd_topic, JointState, queue_size=10, latch=True)
+        self.roll_msg = JointState()
+        self.roll_pub = rospy.Publisher(self.roll_cmd_topic, JointState, queue_size=10, latch=True)
+
+    def send_pitch(self, angle):
+        self.pitch_msg.header.stamp = rospy.Time.now()
+        self.pitch_msg.header.frame_id = self.pitch_frame
+        self.pitch_msg.name = [self.pitch_frame]
+        self.pitch_msg.position = [math.pi * angle / 180]
+        self.pitch_msg.velocity = []
+        self.pitch_msg.effort = []
+        self.pitch_pub.publish(self.pitch_msg)
+
+    def send_roll(self, angle):
+        self.roll_msg.header.stamp = rospy.Time.now()
+        self.roll_msg.header.frame_id = self.roll_frame
+        self.roll_msg.name = [self.roll_frame]
+        self.roll_msg.position = [math.pi * angle / 180]
+        self.roll_msg.velocity = []
+        self.roll_msg.effort = []
+        self.roll_pub.publish(self.roll_msg)
+
+if __name__ == '__main__':
+    pt25senderobj = pt25sender()
+    pt25senderobj.send_pitch(1)
+    pt25senderobj.send_roll(1)
+    while not rospy.is_shutdown():
+        pass
