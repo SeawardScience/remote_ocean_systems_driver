@@ -1,5 +1,7 @@
 # ros_pt
 
+Version 1.0.0
+
 ## About
 This is a ROS2 package for the Remote Ocean Systems R25 tilt actuator. It also has tools for controlling a PT25 Pan & Tilt actuator. The device communicates over RS-422 however this is converted topside to RS-232 which the driver utilizes for communications. Because of the use of RS-422, the timing between characters is very important. 
 
@@ -25,7 +27,7 @@ colcon build
 ```
 
 ## Getting Started
-After sourcing your ROS2 workspace in your terminal you can run the subatlantic node with the following command.
+After sourcing your ROS2 workspace in your terminal you can run the ros_driver.py node with the following command.
 
 ```ros2 run ros_pt ros_driver.py```
 
