@@ -16,7 +16,7 @@ class PT25ROS(Node):
         self.pt25 = pt25(self.port, self.baudrate)
 
         while self.pt25.get_settings('A') != 0:
-            self.get_logger().warn('Unable to connect to ROS Pan/Tilt, Retrying every 1 sec')
+            self.get_logger().warn('Unable to connect to ROS Pan/Tilt, Retrying every 1 sec', once=True)
             time.sleep(1.0)
 
         self.pt25.set_ccw_limit('A', self.pt25.settings['A']['factory_ccw_limit'])
