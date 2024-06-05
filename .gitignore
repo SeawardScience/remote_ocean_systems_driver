@@ -48,3 +48,7 @@ Thumbs.db
 *.mov
 *.wmv
 
+
+docs/_doxygen/html/
+
+docs/_doxygen/xml/
