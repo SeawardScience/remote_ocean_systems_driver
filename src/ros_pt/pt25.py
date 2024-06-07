@@ -8,7 +8,13 @@ POLL_DELAY = 0.01
 CHAR_DELAY = 0.01
 COMMAND_DELAY = 0.1
 
+## \brief Class for controlling a PT25 device.
+#
+# This class provides methods to control a PT25 device over a serial connection.
 class pt25:
+    ## \brief Initializes the PT25 object.
+    #  \param device The serial port device name.
+    #  \param baudrate The baud rate for the serial connection.
     def __init__(self, device, baudrate):
         self.port = device
         self.baudrate = baudrate
@@ -18,6 +24,7 @@ class pt25:
         self.init_serial()
         self.last_command = 0.
 
+    ## \brief Initializes the serial connection.
     def init_serial(self):
         try:
             self.ser = serial.Serial(port=self.port, baudrate=self.baudrate,
@@ -28,8 +35,10 @@ class pt25:
         except serial.serialutil.SerialException as msg:
             print('Failed to open %s (%d): %s' % (self.port, self.baudrate, msg.message))
             exit()
-        #self.ser_symbol_duration = 10./float(self.baudrate)
 
+    ## \brief Sets the counterclockwise limit for the specified address.
+    #  \param address The address of the device.
+    #  \param limit The limit value to set.
     def set_ccw_limit(self, address, limit):
         if address in ADDRESSES:
             self.send(address+'d'+str(int(limit)).zfill(3))
@@ -40,6 +49,9 @@ class pt25:
         else:
             print('Invalid address: %s' % address)
 
+    ## \brief Sets the clockwise limit for the specified address.
+    #  \param address The address of the device.
+    #  \param limit The limit value to set.
     def set_cw_limit(self, address, limit):
         if address in ADDRESSES:
             self.send(address+'u'+str(int(limit)).zfill(3))
@@ -50,10 +62,16 @@ class pt25:
         else:
             print('Invalid address: %s' % address)
 
+    ## \brief Stops the device at the specified address.
+    #  \param address The address of the device.
     def stop(self, address):
         time.sleep(POLL_DELAY*4)
         self.send(address + 's128')
         time.sleep(POLL_DELAY*4)
+
+    ## \brief Sets the position of the device at the specified address.
+    #  \param address The address of the device.
+    #  \param position The position to set.
     def set(self, address, position):
         if address in ADDRESSES:
             # Formula only valid from 1 to 359.5.
@@ -80,6 +98,8 @@ class pt25:
             print('Invalid address: %s' % address)
             return -1
 
+    ## \brief Gets the settings for the device at the specified address.
+    #  \param address The address of the device.
     def get_settings(self, address):
         if address in ADDRESSES:
             self.send(address+'?000')
@@ -111,17 +131,13 @@ class pt25:
             print('Invalid address: %s' % address)
             return -1
 
-
+    ## \brief Polls the device at the specified address.
+    #  \param address The address of the device.
     def poll(self, address):
         if address in ADDRESSES:
             self.send(address+'f')
             time.sleep(POLL_DELAY)
             data = self.read().strip()
-            #data = data.decode('utf-8')
-
-            # # Remove 'Af' from the beginning of the data if it exists
-            # if data.startswith(b'Af'):
-            #     data = data[2:]
 
             if data.__len__() < 3:
                 print('Response too short: %s' % data)
@@ -135,7 +151,6 @@ class pt25:
             try:
                 data_int = int(data[3:])
                 data_deg = 360. * float(data_int - self.settings[address]['factory_ccw_limit']) / float(self.settings[address]['factory_cw_limit'] - self.settings[address]['factory_ccw_limit'])
-                #print('Got data: %d  Deg: %.2f  Raw: %s' % (data_int, data_deg, data))
                 return data_deg
             except:
                 print('Failed to parse %s.' % data[3:])
@@ -144,15 +159,18 @@ class pt25:
             print('Invalid address: %s.' % address)
             return -1
 
+    ## \brief Sends a command to the device.
+    #  \param tx_str The command string to send.
     def send(self, tx_str):
         if time.time() < self.last_command + COMMAND_DELAY:
             time.sleep(max(0., (self.last_command + COMMAND_DELAY) - time.time()))
         self.last_command = time.time()
-        #print('tx: %s' % tx_str)
         for character in tx_str:
             self.ser.write(character.encode('utf-8'))
             time.sleep(CHAR_DELAY)
 
+    ## \brief Reads data from the serial connection.
+    #  \return The data read from the serial connection.
     def read(self):
         try:
             data = self.ser.readline()
@@ -160,33 +178,22 @@ class pt25:
         except:
             data = ''
             print('Failed to read from serial.')
-        #print('rx: %s' % data)
-        return(data)
+        return data
 
+    ## \brief Polls the device once.
     def spin_once(self):
-        #if time.time() >= self.next_poll:
-            #self.poll('A')
-            #self.poll('B')
-        #    self.next_poll += self.dt
-        #    remaining_time = self.next_poll - time.time()
-            #print('Remaining time until next poll: %.3f' % remaining_time)
-        #serial_timeout = max(0, self.next_poll - time.time())
         rfds, wfds, efds = select.select([self.ser.fileno()], [], [], self.serial_timeout)
         if rfds.__len__() > 0 and rfds[0] == self.ser.fileno():
             data = self.read()
             print(data)
         else:
             pass
-            #print('No traffic on %s (%d).' % (self.port, self.baudrate))
 
 if __name__ == '__main__':
     pt25obj = pt25('/dev/ttyUSB0', 9600)
     pt25obj.get_settings('A')
     pt25obj.get_settings('B')
-    #pt25obj.set('A', 90)
-    #pt25obj.set('B', 180)
     while True:
         pt25obj.poll('A')
         pt25obj.poll('B')
         time.sleep(1.0)
-        #pt25obj.spin_once()

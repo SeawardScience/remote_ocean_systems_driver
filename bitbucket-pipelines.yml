@@ -1,0 +1,23 @@
+image: atlassian/default-image:3
+
+pipelines:
+  branches:
+    main:
+    - step:
+        name: Build and Deploy Documentation
+        script:
+          - apt-get update && apt-get install -y doxygen
+          - cd docs
+          - doxygen Doxyfile
+          - cd ..
+          - git clone https://x-token-auth:$OAUTH_ACCESS_TOKEN@bitbucket.org/$BITBUCKET_WORKSPACE/oceanexplorationtrust.bitbucket.io.git
+          - git config --global user.email "commits-noreply@bitbucket.org"
+          - git config --global user.name "bitbucket-pipelines"
+          - cd oceanexplorationtrust.bitbucket.io
+          - rm -rf rospt
+          - mkdir rospt
+          - cp -r ../docs/_doxygen/html/* rospt/
+          - git add .
+          - git commit -m "Auto update documentation from pipelines"
+          - git push
+
