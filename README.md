@@ -3,7 +3,7 @@
 Version 1.0.0
 
 ## About
-This is a ROS2 package for the Remote Ocean Systems R25 tilt actuator. It also has tools for controlling a PT25 Pan & Tilt actuator. The device communicates over RS-422 however this is converted topside to RS-232 which the driver utilizes for communications. Because of the use of RS-422, the timing between characters is very important. 
+This is a ROS2 package for the Remote Ocean Systems R25 tilt actuator. It also has tools for controlling a PT25 Pan & Tilt actuator. The device communicates over RS-485 however this is converted topside to RS-232 which the driver utilizes for communications. Because of the use of RS-485, the timing between characters is very important. 
 
 ## Installation
 The package can be cloned via Git to the src directory in your ROS2 workspace. 
@@ -48,13 +48,11 @@ This driver also includes tools for running a Remote Ocean Systems pan and tilt.
 
 ### Subscribed Topics
 
-- **`valve_msg`** (`hydraulic_interfaces/msg/Valve`): Subscribes to commands for individual valves.
+- **`~/cmd/addr_a`** (`sensor_msgs/JointState`): Publishes commands to control the PT25 device.
 
 ### Published Topics
 
-- **`serial_connection/to_device`** (`io_interfaces/msg/RawPacket`): Sends raw data packets to the IO interface.
 - **`~/pos/addr_a`** (`sensor_msgs/JointState`): Publishes the current position of the PT25 device.
-- **`~/cmd/addr_a`** (`sensor_msgs/JointState`): Publishes commands to control the PT25 device.
 
 ## Parameters
 
