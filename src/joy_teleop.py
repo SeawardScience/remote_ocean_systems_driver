@@ -55,8 +55,10 @@ class TiltSpeedTeleop(Node):
         speed_units = int(round(v * self.max_speed_units))
         speed_units = max(-80, min(80, speed_units))
 
-        # Only publish if value changed
-        if self.last_sent is None or speed_units != self.last_sent:
+        # Publish rules:
+        # - Always publish nonzero values, even if unchanged
+        # - Only suppress repeats of 0
+        if speed_units != 0 or speed_units != self.last_sent:
             self.pub.publish(Int32(data=speed_units))
             self.last_sent = speed_units
 
