@@ -15,9 +15,9 @@ class pt25:
     ## \brief Initializes the PT25 object.
     #  \param device The serial port device name.
     #  \param baudrate The baud rate for the serial connection.
-    def __init__(self, device, baudrate):
-        self.port = device
-        self.baudrate = baudrate
+    def __init__(self):
+        #self.port = device
+        #self.baudrate = baudrate
         self.serial_timeout = SERIAL_TIMEOUT
         self.settings = dict()
 

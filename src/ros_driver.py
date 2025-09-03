@@ -16,14 +16,14 @@ class PT25ROS(Node):
         self.node_name = self.get_name()
         self.get_params()
 
-        self.pt25 = pt25(self.port, self.baudrate)
+        self.pt25 = pt25()
 
-        while self.pt25.get_settings('A') != 0:
+        while self.pt25.get_settings(self.roll_address) != 0:
             self.get_logger().warn('Unable to connect to ROS Pan/Tilt, Retrying every 1 sec', once=True)
             time.sleep(1.0)
 
-        self.pt25.set_ccw_limit('A', self.pt25.settings['A']['factory_ccw_limit'])
-        self.pt25.set_cw_limit('A', self.pt25.settings['A']['factory_cw_limit'])
+        self.pt25.set_ccw_limit(self.roll_address, self.pt25.settings[self.roll_address]['factory_ccw_limit'])
+        self.pt25.set_cw_limit(self.roll_address, self.pt25.settings[self.roll_address]['factory_cw_limit'])
 
         self.last_pitch_cmd = self.get_clock().now()
         self.last_roll_cmd = self.get_clock().now()
@@ -40,6 +40,7 @@ class PT25ROS(Node):
         self.declare_parameter('baudrate', 9600)
         self.declare_parameter('poll_rate', 5.0)
         self.declare_parameter('min_cmd_delay', 1.0)
+        self.declare_parameter('roll_address', 'A')
 
         self.declare_parameter('roll_topic', '~/pos/addr_a')
         self.declare_parameter('roll_cmd_topic', '~/cmd/addr_a')
@@ -49,6 +50,7 @@ class PT25ROS(Node):
         self.baudrate = self.get_parameter('baudrate').get_parameter_value().integer_value
         self.poll_rate = self.get_parameter('poll_rate').get_parameter_value().double_value
         self.min_cmd_delay = self.get_parameter('min_cmd_delay').get_parameter_value().double_value
+        self.roll_address = self.get_parameter('roll_address').get_parameter_value().string_value
 
         self.roll_topic = self.get_parameter('roll_topic').get_parameter_value().string_value
         self.roll_cmd_topic = self.get_parameter('roll_cmd_topic').get_parameter_value().string_value
@@ -66,12 +68,12 @@ class PT25ROS(Node):
     #  \param msg The incoming JointState message.
     def roll_cmd_cb(self, msg):
         self.last_roll_cmd = msg.header.stamp
-        self.pt25.stop('A')
-        self.pt25.set('A', msg.position[0] * 180. / math.pi)
+        self.pt25.stop(self.roll_address)
+        self.pt25.set(self.roll_address, msg.position[0] * 180. / math.pi)
 
     ## \brief Timer callback for polling the device.
     def poll_callback(self):
-        self.poll('A')
+        self.poll(self.roll_address)
 
     ## \brief Polls the device and publishes the position.
     #  \param address The address of the device.
