@@ -29,18 +29,21 @@ class PT25ROS(Node):
         self.get_logger().info('PT25 factory cw limit %d' % (self.pt25.settings[self.address]['factory_cw_limit']))
 
         # Set the ccw limit
-        if self.ccw_limit != 0:
+        if self.ccw_limit != 0 and self.ccw_limit > self.pt25.settings[self.address]['factory_ccw_limit']:
             self.pt25.set_ccw_limit(self.address, self.ccw_limit)
             self.get_logger().info('PT25 ccw limit set to %d' % (self.ccw_limit))
         else:
             self.pt25.set_ccw_limit(self.address, self.pt25.settings[self.address]['factory_ccw_limit'])
 
         # Set the cw limit
-        if self.cw_limit != 0:
+        if self.cw_limit != 0 and self.cw_limit < self.pt25.settings[self.address]['factory_cw_limit']:
             self.pt25.set_cw_limit(self.address, self.cw_limit)
             self.get_logger().info('PT25 cw limit set to %d' % (self.cw_limit))
         else:
             self.pt25.set_cw_limit(self.address, self.pt25.settings[self.address]['factory_cw_limit'])
+
+        self.get_logger().info('PT25 user ccw limit set to %d' % (self.pt25.settings[self.address]['user_ccw_limit']))
+        self.get_logger().info('PT25 user cw limit set to %d' % (self.pt25.settings[self.address]['user_cw_limit']))
 
         self.last_pitch_cmd = self.get_clock().now()
         self.last_roll_cmd = self.get_clock().now()

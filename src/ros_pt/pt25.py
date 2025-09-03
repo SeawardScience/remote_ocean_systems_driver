@@ -76,14 +76,14 @@ class pt25:
         if address in ADDRESSES:
             # Formula only valid from 1 to 359.5.
             if position >= 1.0 and position <= 359.5:
-                counts = math.ceil(position / (360./float(self.settings[address]['factory_cw_limit'] - self.settings[address]['factory_ccw_limit'])) + float(self.settings[address]['factory_ccw_limit']) + 0.5)
+                counts = math.ceil(position / (360./float(self.settings[address]['user_cw_limit'] - self.settings[address]['user_ccw_limit'])) + float(self.settings[address]['user_ccw_limit']) + 0.5)
             # Some special cases
             elif position >= 0 and position < 0.5:
-                counts = self.settings[address]['factory_ccw_limit']
+                counts = self.settings[address]['user_ccw_limit']
             elif position >= 0.5 and position < 1.0:
-                counts = self.settings[address]['factory_ccw_limit'] + 1
+                counts = self.settings[address]['user_ccw_limit'] + 1
             elif position > 359.5:
-                counts = self.settings[address]['factory_cw_limit']
+                counts = self.settings[address]['user_cw_limit']
             # Out of bounds
             else:
                 print('Position out of bounds: %.3f' % position)
