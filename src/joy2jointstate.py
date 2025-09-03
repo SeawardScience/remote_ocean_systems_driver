@@ -14,16 +14,16 @@ class TiltJoyToJoint(Node):
         super().__init__('tilt_joy_to_joint')
 
         # --- Minimal params ---
-        self.declare_parameter('joy_topic', '/joy')
-        self.declare_parameter('cmd_topic', '/pt25/cmd')       # set to PT25ROS roll_cmd_topic
+        self.declare_parameter('joy_topic', 'joy')
+        self.declare_parameter('cmd_topic', '~/cmd/addr_a')    # set to PT25ROS roll_cmd_topic
         self.declare_parameter('axis', 1)                      # joystick axis index (e.g., stick Y)
         self.declare_parameter('deadband', 0.05)               # ignore tiny noise
         self.declare_parameter('max_rate_deg_s', 60.0)         # speed at |axis|=1 (deg/s)
         self.declare_parameter('min_deg', 0.0)                 # soft lower limit (deg)
         self.declare_parameter('max_deg', 360.0)               # soft upper limit (deg)
-        self.declare_parameter('hz', 50.0)                     # publish rate
+        self.declare_parameter('hz', 10.0)                     # publish rate
         self.declare_parameter('joint_name', 'pt_axis_a')      # must match PT25ROS expects
-        self.declare_parameter('initial_deg', 0.0)             # start position (deg)
+        self.declare_parameter('initial_deg', 150.0)           # start position (deg)
 
         # --- Resolve ---
         self.joy_topic  = self.get_parameter('joy_topic').value
