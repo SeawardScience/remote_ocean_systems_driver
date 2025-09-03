@@ -2,6 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
+from std_msgs.msg import Int32
 from ros_pt.pt25 import pt25
 import math
 import time
@@ -41,7 +42,9 @@ class PT25ROS(Node):
             self.get_logger().info('PT25 cw limit set to %d' % (self.cw_limit))
         else:
             self.pt25.set_cw_limit(self.address, self.pt25.settings[self.address]['factory_cw_limit'])
-
+            self.get_logger().info('PT25 cw limit set to %d' % (self.pt25.settings[self.address]['factory_cw_limit']))
+        
+        self.pt25.get_settings(self.address)
         self.get_logger().info('PT25 user ccw limit set to %d' % (self.pt25.settings[self.address]['user_ccw_limit']))
         self.get_logger().info('PT25 user cw limit set to %d' % (self.pt25.settings[self.address]['user_cw_limit']))
 
@@ -63,6 +66,7 @@ class PT25ROS(Node):
 
         self.declare_parameter('roll_topic', '~/pos/addr_a')
         self.declare_parameter('roll_cmd_topic', '~/cmd/addr_a')
+        self.declare_parameter('speed_cmd_topic', '~/cmd_speed/addr_a')
         self.declare_parameter('roll_frame', 'pt_axis_a')
 
         self.port = self.get_parameter('port').get_parameter_value().string_value
@@ -75,11 +79,13 @@ class PT25ROS(Node):
 
         self.roll_topic = self.get_parameter('roll_topic').get_parameter_value().string_value
         self.roll_cmd_topic = self.get_parameter('roll_cmd_topic').get_parameter_value().string_value
+        self.speed_cmd_topic = self.get_parameter('speed_cmd_topic').get_parameter_value().string_value
         self.roll_frame = self.get_parameter('roll_frame').get_parameter_value().string_value
 
     ## \brief Initializes the ROS subscribers.
     def init_subscribers(self):
         self.create_subscription(JointState, self.roll_cmd_topic, self.roll_cmd_cb, 10)
+        self.create_subscription(Int32, self.speed_cmd_topic, self.speed_cmd_cb, 10)
 
     ## \brief Initializes the ROS publishers.
     def init_publishers(self):
@@ -91,6 +97,15 @@ class PT25ROS(Node):
         self.last_roll_cmd = msg.header.stamp
         self.pt25.stop(self.address)
         self.pt25.set(self.address, msg.position[0] * 180. / math.pi)
+
+    ## \brief Callback for speed command messages.Signed speed command in device units: [-80..80]. Negative -> CCW, Positive -> CW, 0 -> stop.
+    #  \param msg The incoming Int32 message.
+    def speed_cmd_cb(self, msg: Int32):
+        speed = int(msg.data)
+        if speed < -80: speed = -80
+        if speed >  80: speed =  80
+        # Call your new rotate helper (signed): <0 CCW, >0 CW, 0 stop
+        self.pt25.rotate(self.address, speed)
 
     ## \brief Timer callback for polling the device.
     def poll_callback(self):
