@@ -3,6 +3,11 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Joy
 from std_msgs.msg import Int32
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+
+qos = QoSProfile(depth=1)
+qos.reliability = ReliabilityPolicy.RELIABLE
+qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
 
 class TiltSpeedTeleop(Node):
     """
@@ -32,7 +37,7 @@ class TiltSpeedTeleop(Node):
 
         # --- ROS I/O ---
         self.sub = self.create_subscription(Joy, self.joy_topic, self.on_joy, 10)
-        self.pub = self.create_publisher(Int32, self.cmd_speed_topic, 10)
+        self.pub = self.create_publisher(Int32, self.cmd_speed_topic, qos)
 
         self.get_logger().info(
             f"[{self.get_name()}] listening on {self.joy_topic}, "

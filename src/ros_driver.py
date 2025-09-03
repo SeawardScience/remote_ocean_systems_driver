@@ -6,6 +6,11 @@ from std_msgs.msg import Int32
 from ros_pt.pt25 import pt25
 import math
 import time
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+
+qos = QoSProfile(depth=1)
+qos.reliability = ReliabilityPolicy.RELIABLE
+qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
 
 ## \brief A ROS node for controlling a PT25 device.
 #
@@ -84,8 +89,8 @@ class PT25ROS(Node):
 
     ## \brief Initializes the ROS subscribers.
     def init_subscribers(self):
-        self.create_subscription(JointState, self.roll_cmd_topic, self.roll_cmd_cb, 10)
-        self.create_subscription(Int32, self.speed_cmd_topic, self.speed_cmd_cb, 10)
+        self.create_subscription(JointState, self.roll_cmd_topic, self.roll_cmd_cb, qos)
+        self.create_subscription(Int32, self.speed_cmd_topic, self.speed_cmd_cb, qos)
 
     ## \brief Initializes the ROS publishers.
     def init_publishers(self):
