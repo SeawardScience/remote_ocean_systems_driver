@@ -11,6 +11,7 @@ ament_python_install_package(${PROJECT_NAME} PACKAGE_DIR src/${PROJECT_NAME})
 # Install entry point scripts
 install(PROGRAMS
   src/ros_driver.py
+  src/joy_teleop.py
   DESTINATION lib/${PROJECT_NAME})
 
 # Install launch files
