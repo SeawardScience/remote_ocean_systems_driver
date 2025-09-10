@@ -7,7 +7,8 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
 qos = QoSProfile(depth=1)
 qos.reliability = ReliabilityPolicy.RELIABLE
-qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+qos.durability = DurabilityPolicy.VOLATILE
+#qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
 
 class TiltSpeedTeleop(Node):
     """
@@ -23,7 +24,7 @@ class TiltSpeedTeleop(Node):
         self.declare_parameter('cmd_speed_topic', '/pt25/cmd_speed')
         self.declare_parameter('axis', 7)
         self.declare_parameter('deadband', 0.05)
-        self.declare_parameter('max_device_speed', 20)   # 0..80, each ~0.5 deg/s
+        self.declare_parameter('max_device_speed', 40)   # 0..80, each ~0.5 deg/s
 
         # --- Resolve ---
         self.joy_topic = self.get_parameter('joy_topic').value
