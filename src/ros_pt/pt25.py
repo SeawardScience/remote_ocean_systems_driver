@@ -71,6 +71,8 @@ class pt25:
         time.sleep(POLL_DELAY*4)
         self.send(address + 's128')
         time.sleep(POLL_DELAY*4)
+        self.read()                 # <<< consume echo / ack
+        time.sleep(POLL_DELAY*4)
 
     ## \brief Sets the position of the device at the specified address.
     #  \param address The address of the device.
@@ -147,20 +149,20 @@ class pt25:
                 return -1
             if data[0:2] != address+'f':
                 print('Invalid echo: %s' % data)
-                return -1
+                return -2
             if data[2] != address:
                 print('Wrong address: %s' % data[2])
-                return -1
+                return -3
             try:
                 data_int = int(data[3:])
                 data_deg = 360. * float(data_int - self.settings[address]['factory_ccw_limit']) / float(self.settings[address]['factory_cw_limit'] - self.settings[address]['factory_ccw_limit'])
                 return data_deg
             except:
                 print('Failed to parse %s.' % data[3:])
-                return -1
+                return -4
         else:
             print('Invalid address: %s.' % address)
-            return -1
+            return -5
 
     ## \brief Sends a command to the device.
     #  \param tx_str The command string to send.
@@ -223,6 +225,7 @@ class pt25:
         self.send(cmd)
         time.sleep(POLL_DELAY)
         self.read()
+        time.sleep(POLL_DELAY)
         return 0
 
     def rotate_cw(self, address, rotate_speed: int = None):
@@ -235,6 +238,7 @@ class pt25:
         self.send(cmd)
         time.sleep(POLL_DELAY)
         self.read()
+        time.sleep(POLL_DELAY)
         return 0
 
     def rotate(self, address, signed_speed: int):
