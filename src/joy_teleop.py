@@ -24,7 +24,7 @@ class TiltSpeedTeleop(Node):
         self.declare_parameter('cmd_speed_topic', '/pt25/cmd_speed')
         self.declare_parameter('axis', 7)
         self.declare_parameter('deadband', 0.05)
-        self.declare_parameter('max_device_speed', 40)   # 0..80, each ~0.5 deg/s
+        self.declare_parameter('max_device_speed', 10)   # 0..80, each ~0.5 deg/s
 
         # --- Resolve ---
         self.joy_topic = self.get_parameter('joy_topic').value

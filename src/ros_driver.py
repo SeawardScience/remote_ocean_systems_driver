@@ -8,9 +8,10 @@ import math
 import time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
-qos = QoSProfile(depth=1)
+qos = QoSProfile(depth=5)
 qos.reliability = ReliabilityPolicy.RELIABLE
-qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+qos.durability = DurabilityPolicy.VOLATILE
+#qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
 
 ## \brief A ROS node for controlling a PT25 device.
 #
@@ -53,6 +54,8 @@ class PT25ROS(Node):
         self.get_logger().info('PT25 user ccw limit set to %d' % (self.pt25.settings[self.address]['user_ccw_limit']))
         self.get_logger().info('PT25 user cw limit set to %d' % (self.pt25.settings[self.address]['user_cw_limit']))
 
+        self.speed = -1
+        self.last_speed_cmd = self.get_clock().now()
         self.last_pitch_cmd = self.get_clock().now()
         self.last_roll_cmd = self.get_clock().now()
         self.min_cmd_duration = rclpy.duration.Duration(seconds=self.min_cmd_delay)
@@ -64,7 +67,7 @@ class PT25ROS(Node):
         self.declare_parameter('port', '/dev/ttyS3')
         self.declare_parameter('baudrate', 9600)
         self.declare_parameter('poll_rate', 5.0)
-        self.declare_parameter('min_cmd_delay', 1.0)
+        self.declare_parameter('min_cmd_delay', 0.04)
         self.declare_parameter('address', 'A')
         self.declare_parameter('ccw_limit', 0)
         self.declare_parameter('cw_limit', 0)
@@ -109,8 +112,26 @@ class PT25ROS(Node):
         speed = int(msg.data)
         if speed < -80: speed = -80
         if speed >  80: speed =  80
-        # Call your new rotate helper (signed): <0 CCW, >0 CW, 0 stop
+
+        now = self.get_clock().now()
+
+        # Always allow STOP, but don't spam if we're already stopped
+        if speed == 0:
+            if self.speed != 0:
+                self.pt25.stop(self.address)
+                self.speed = 0
+                self.last_speed_cmd = now
+            return
+
+        # If different speed but too soon, drop it (optional: log once)
+        if speed != self.speed and (now - self.last_speed_cmd) < self.min_cmd_duration:
+            self.get_logger().warn('Ignoring speed command: min_cmd_delay not met', throttle_duration_sec=1.0)
+            return
+
+        # Send to device
         self.pt25.rotate(self.address, speed)
+        self.speed = speed
+        self.last_speed_cmd = now
 
     ## \brief Timer callback for polling the device.
     def poll_callback(self):
