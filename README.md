@@ -1,4 +1,4 @@
-# ros_pt
+# Remote Ocean Systems Driver
 
 Version 1.0.0
 
@@ -29,7 +29,7 @@ colcon build
 ## Getting Started
 After sourcing your ROS2 workspace in your terminal you can run the ros_driver.py node with the following command.
 
-```ros2 run ros_pt ros_driver.py```
+```ros2 run remote_ocean_systems_driver ros_driver.py```
 
 To move the tilt motor send a position goal in the form of a JointState position msg. The driver expects position in radians.
 
@@ -37,7 +37,7 @@ To move the tilt motor send a position goal in the form of a JointState position
 
 You can also use an example launch file to run the driver.
 
-```ros2 launch ros_pt ros_pt.launch.xml```
+```ros2 launch remote_ocean_systems_driver ros_pt.launch.xml```
 
 Parameters can be adjusted from yaml files found in the config folder. Example config and launch files are included for testing.
 

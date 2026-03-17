@@ -5,8 +5,8 @@
   <arg name="vessel_ns"       default="herc"/>
   <arg name="vessel_config"   default="herc"/>
 
-  <node pkg="ros_pt" exec="ros_driver.py" name="ros_pt" namespace="$(var vessel_ns)/control/$(var valve_pack_name)" output="screen">
-    <param from="$(find-pkg-share ros_pt)/config/ros_pt.yaml"/>
+  <node pkg="remote_ocean_systems_driver" exec="ros_driver.py" name="ros_pt" namespace="$(var vessel_ns)/control/tilt" output="screen">
+    <param from="$(find-pkg-share remote_ocean_systems_driver)/config/ros_pt.yaml"/>
   </node>
 
 </launch>
