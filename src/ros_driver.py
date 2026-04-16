@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32
-from ros_pt.pt25 import pt25
+from remote_ocean_systems_driver.pt25 import pt25
 import math
 import time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
