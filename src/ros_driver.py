@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
 from std_msgs.msg import Int32
-from ros_pt.pt25 import pt25
+from remote_ocean_systems_driver.pt25 import pt25
 import math
 import time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
@@ -32,8 +32,8 @@ class PT25ROS(Node):
             self.get_logger().warn('Unable to connect to ROS Pan/Tilt, Retrying every 1 sec', once=True)
             time.sleep(1.0)
 
-        self.get_logger().info('PT25 factory ccw limit %d' % (self.pt25.settings[self.address]['factory_ccw_limit']))
-        self.get_logger().info('PT25 factory cw limit %d' % (self.pt25.settings[self.address]['factory_cw_limit']))
+        self.get_logger().info('PT25 factory ccw limit %d' % (self.pt25.settings[self.address]['factory_ccw_limit'])) # factory limit is 5
+        self.get_logger().info('PT25 factory cw limit %d' % (self.pt25.settings[self.address]['factory_cw_limit'])) # factory limit is 962
 
         # Set the ccw limit
         if self.ccw_limit != 0 and self.ccw_limit > self.pt25.settings[self.address]['factory_ccw_limit']:
@@ -104,7 +104,7 @@ class PT25ROS(Node):
     def roll_cmd_cb(self, msg):
         self.last_roll_cmd = msg.header.stamp
         self.pt25.stop(self.address)
-        self.pt25.set(self.address, msg.position[0] * 180. / math.pi)
+        self.pt25.set(self.address, msg.position[0] * 180. / math.pi) # radians to degrees
 
     ## \brief Callback for speed command messages.Signed speed command in device units: [-80..80]. Negative -> CCW, Positive -> CW, 0 -> stop.
     #  \param msg The incoming Int32 message.
