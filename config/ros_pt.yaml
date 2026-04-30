@@ -1,4 +1,46 @@
 /**:
   ros__parameters:
-    port: /dev/ttyACM0
-    baudrate: 9600
+    # --- roship_io serial_connection node (use_serial:=true, the default) ---
+    serial:
+      port: /dev/ttyUSB0
+      baud_rate: 9600
+      use_end_of_frame_ascii: true
+      end_of_frame_ascii: "\n"   # PT25 responses are \r\n terminated
+
+    # --- roship_io udp_connection node (use_serial:=false) ---
+    # Typical setup: RS-485-to-UDP converter such as a Moxa NPort.
+    # The converter listens on dst_ports[0] and echoes received serial data
+    # back to the same port; set sock.port to the same value to receive it.
+    sock:
+      dst_hosts:
+        - 10.1.20.31      # IP address of the RS-485-to-UDP converter
+      dst_ports:
+        - 4016            # TCP/UDP port mapped to the RS-485 serial port
+      port: 4016          # local UDP port to listen on for replies
+      buffer_size: 1024
+
+    # --- ros_driver node ---
+    addresses: ['A', 'B']    # device addresses to enable; add 'C' etc. as needed
+    poll_rate: 5.0            # Hz per address (alternating, so each address gets poll_rate/N_addresses Hz)
+    min_cmd_delay: 0.04       # seconds
+    joy_topic: /joy
+
+    # Per-address config — declared dynamically from the addresses list above.
+    # joy_axis: joystick axis index to drive this address (-1 = disabled).
+    addr_a:
+      enabled: true
+      ccw_limit: 0           # 0 = use factory default
+      cw_limit: 0
+      roll_frame: pt_axis_a
+      joy_axis: 0
+      joy_max_speed: 100
+      joy_deadband: 0.05
+
+    addr_b:
+      enabled: true
+      ccw_limit: 0
+      cw_limit: 0
+      roll_frame: pt_axis_b
+      joy_axis: 1            # disabled — responds only to explicit cmd topics
+      joy_max_speed: 100
+      joy_deadband: 0.05

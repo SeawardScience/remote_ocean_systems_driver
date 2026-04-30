@@ -2,10 +2,34 @@
 
 <launch>
 
-  <arg name="vessel_ns"       default="herc"/>
-  <arg name="vessel_config"   default="herc"/>
+  <arg name="vessel_ns"     default="herc"/>
+  <arg name="vessel_config" default="herc"/>
+  <!-- Set use_serial:=false to use a UDP-to-RS485 converter (e.g. Moxa NPort) instead -->
+  <arg name="use_serial"    default="true"/>
 
-  <node pkg="remote_ocean_systems_driver" exec="ros_driver.py" name="ros_pt" namespace="$(var vessel_ns)/control/tilt" output="screen">
+  <!-- Serial transport (default) -->
+  <node if="$(var use_serial)"
+        pkg="roship_io" exec="serial_connection"
+        name="connection"
+        namespace="$(var vessel_ns)/control/tilt/ros_pt"
+        output="screen">
+    <param from="$(find-pkg-share remote_ocean_systems_driver)/config/ros_pt.yaml"/>
+  </node>
+
+  <!-- UDP transport (use_serial:=false) — configure sock.* in ros_pt.yaml -->
+  <node unless="$(var use_serial)"
+        pkg="roship_io" exec="udp_connection"
+        name="connection"
+        namespace="$(var vessel_ns)/control/tilt/ros_pt"
+        output="screen">
+    <param from="$(find-pkg-share remote_ocean_systems_driver)/config/ros_pt.yaml"/>
+  </node>
+
+  <!-- PT25 protocol / driver node -->
+  <node pkg="remote_ocean_systems_driver" exec="ros_driver.py"
+        name="ros_pt"
+        namespace="$(var vessel_ns)/control/tilt"
+        output="screen">
     <param from="$(find-pkg-share remote_ocean_systems_driver)/config/ros_pt.yaml"/>
   </node>
 

@@ -1,165 +1,293 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import JointState
-from std_msgs.msg import Int32
-from remote_ocean_systems_driver.pt25 import pt25
-import math
-import time
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+from sensor_msgs.msg import JointState
+from sensor_msgs.msg import Joy
+from std_msgs.msg import Int32
+from io_interfaces.msg import RawPacket
+import math
+from remote_ocean_systems_driver import pt25 as protocol
 
 qos = QoSProfile(depth=5)
 qos.reliability = ReliabilityPolicy.RELIABLE
-qos.durability = DurabilityPolicy.VOLATILE
-#qos.durability  = DurabilityPolicy.TRANSIENT_LOCAL
+qos.durability  = DurabilityPolicy.VOLATILE
 
-## \brief A ROS node for controlling a PT25 device.
-#
-# This node interfaces with a PT25 device and publishes its position as a ROS topic.
+# Minimum gap between commands sent to the device (matches original COMMAND_DELAY).
+# Commands are queued and drained at this rate so the serial_connection's queue-
+# depth-1 subscription never drops a message.
+COMMAND_INTERVAL_S = 0.12
+
+
 class PT25ROS(Node):
-    ## \brief Initializes the PT25ROS node.
     def __init__(self):
         super().__init__('pt25')
-        self.node_name = self.get_name()
-        self.get_params()
-        self.init_subscribers()
-        self.init_publishers()
 
-        self.pt25 = pt25(self.port, self.baudrate)
-        self.get_logger().info('Connecting to PT25 device at %s:%d' % (self.port, self.baudrate))
+        # ---- addresses list (declare first so per-address params can be forward-declared) ----
+        self.declare_parameter('addresses', ['A', 'B'])
+        addresses = self.get_parameter('addresses').value
 
-        while self.pt25.get_settings(self.address) != 0:
-            self.get_logger().warn('Unable to connect to ROS Pan/Tilt, Retrying every 1 sec', once=True)
-            time.sleep(1.0)
+        # ---- per-address params (forward-declared from the addresses list) ----
+        self.addr_cfg = {}
+        for addr in addresses:
+            key = f'addr_{addr.lower()}'
+            self.declare_parameter(f'{key}.enabled',        True)
+            self.declare_parameter(f'{key}.ccw_limit',      0)
+            self.declare_parameter(f'{key}.cw_limit',       0)
+            self.declare_parameter(f'{key}.roll_frame',     f'pt_axis_{addr.lower()}')
+            self.declare_parameter(f'{key}.joy_axis',       -1)
+            self.declare_parameter(f'{key}.joy_max_speed',  10)
+            self.declare_parameter(f'{key}.joy_deadband',   0.05)
+            self.addr_cfg[addr] = {
+                'enabled':       self.get_parameter(f'{key}.enabled').value,
+                'ccw_limit':     self.get_parameter(f'{key}.ccw_limit').value,
+                'cw_limit':      self.get_parameter(f'{key}.cw_limit').value,
+                'roll_frame':    self.get_parameter(f'{key}.roll_frame').value,
+                'joy_axis':      self.get_parameter(f'{key}.joy_axis').value,
+                'joy_max_speed': self.get_parameter(f'{key}.joy_max_speed').value,
+                'joy_deadband':  self.get_parameter(f'{key}.joy_deadband').value,
+            }
 
-        self.get_logger().info('PT25 factory ccw limit %d' % (self.pt25.settings[self.address]['factory_ccw_limit'])) # factory limit is 5
-        self.get_logger().info('PT25 factory cw limit %d' % (self.pt25.settings[self.address]['factory_cw_limit'])) # factory limit is 962
-
-        # Set the ccw limit
-        if self.ccw_limit != 0 and self.ccw_limit > self.pt25.settings[self.address]['factory_ccw_limit']:
-            self.pt25.set_ccw_limit(self.address, self.ccw_limit)
-            self.get_logger().info('PT25 ccw limit set to %d' % (self.ccw_limit))
-        else:
-            self.pt25.set_ccw_limit(self.address, self.pt25.settings[self.address]['factory_ccw_limit'])
-
-        # Set the cw limit
-        if self.cw_limit != 0 and self.cw_limit < self.pt25.settings[self.address]['factory_cw_limit']:
-            self.pt25.set_cw_limit(self.address, self.cw_limit)
-            self.get_logger().info('PT25 cw limit set to %d' % (self.cw_limit))
-        else:
-            self.pt25.set_cw_limit(self.address, self.pt25.settings[self.address]['factory_cw_limit'])
-            self.get_logger().info('PT25 cw limit set to %d' % (self.pt25.settings[self.address]['factory_cw_limit']))
-        
-        self.pt25.get_settings(self.address)
-        self.get_logger().info('PT25 user ccw limit set to %d' % (self.pt25.settings[self.address]['user_ccw_limit']))
-        self.get_logger().info('PT25 user cw limit set to %d' % (self.pt25.settings[self.address]['user_cw_limit']))
-
-        self.speed = -1
-        self.last_speed_cmd = self.get_clock().now()
-        self.last_pitch_cmd = self.get_clock().now()
-        self.last_roll_cmd = self.get_clock().now()
-        self.min_cmd_duration = rclpy.duration.Duration(seconds=self.min_cmd_delay)
-
-        self.timer = self.create_timer(1.0 / self.poll_rate, self.poll_callback)
-
-    ## \brief Gets parameters from the ROS parameter server.
-    def get_params(self):
-        self.declare_parameter('port', '/dev/ttyS3')
-        self.declare_parameter('baudrate', 9600)
-        self.declare_parameter('poll_rate', 5.0)
+        # ---- shared params ----
+        self.declare_parameter('poll_rate',     5.0)
         self.declare_parameter('min_cmd_delay', 0.04)
-        self.declare_parameter('address', 'A')
-        self.declare_parameter('ccw_limit', 0)
-        self.declare_parameter('cw_limit', 0)
+        self.declare_parameter('joy_topic',     '/joy')
+        poll_rate     = self.get_parameter('poll_rate').value
+        min_cmd_delay = self.get_parameter('min_cmd_delay').value
+        joy_topic     = self.get_parameter('joy_topic').value
 
-        self.declare_parameter('roll_topic', '~/pos/addr_a')
-        self.declare_parameter('roll_cmd_topic', '~/cmd/addr_a')
-        self.declare_parameter('speed_cmd_topic', '~/cmd_speed/addr_a')
-        self.declare_parameter('roll_frame', 'pt_axis_a')
+        self.min_cmd_duration = rclpy.duration.Duration(seconds=min_cmd_delay)
 
-        self.port = self.get_parameter('port').get_parameter_value().string_value
-        self.baudrate = self.get_parameter('baudrate').get_parameter_value().integer_value
-        self.poll_rate = self.get_parameter('poll_rate').get_parameter_value().double_value
-        self.min_cmd_delay = self.get_parameter('min_cmd_delay').get_parameter_value().double_value
-        self.address = self.get_parameter('address').get_parameter_value().string_value
-        self.ccw_limit = self.get_parameter('ccw_limit').get_parameter_value().integer_value
-        self.cw_limit = self.get_parameter('cw_limit').get_parameter_value().integer_value
+        # ---- per-address runtime state ----
+        self.enabled_addresses = [a for a in addresses if self.addr_cfg[a]['enabled']]
+        self.settings       = {a: None  for a in self.enabled_addresses}
+        self.settings_ready = {a: False for a in self.enabled_addresses}
+        self.init_state     = {a: 0     for a in self.enabled_addresses}
+        self.speed          = {a: -1    for a in self.enabled_addresses}
+        self.last_speed_cmd = {a: self.get_clock().now() for a in self.enabled_addresses}
+        self.poll_idx       = 0
 
-        self.roll_topic = self.get_parameter('roll_topic').get_parameter_value().string_value
-        self.roll_cmd_topic = self.get_parameter('roll_cmd_topic').get_parameter_value().string_value
-        self.speed_cmd_topic = self.get_parameter('speed_cmd_topic').get_parameter_value().string_value
-        self.roll_frame = self.get_parameter('roll_frame').get_parameter_value().string_value
+        # ---- command queue: drained at COMMAND_INTERVAL_S to keep serial_connection happy ----
+        self._cmd_queue = []
+        self.create_timer(COMMAND_INTERVAL_S, self._drain_queue)
 
-    ## \brief Initializes the ROS subscribers.
-    def init_subscribers(self):
-        self.create_subscription(JointState, self.roll_cmd_topic, self.roll_cmd_cb, qos)
-        self.create_subscription(Int32, self.speed_cmd_topic, self.speed_cmd_cb, qos)
+        # ---- raw transport ----
+        self._to_device_pub = self.create_publisher(RawPacket, '~/connection/to_device', 10)
+        self.create_subscription(RawPacket, '~/connection/from_device', self.from_device_cb, 10)
 
-    ## \brief Initializes the ROS publishers.
-    def init_publishers(self):
-        self.roll_pub = self.create_publisher(JointState, self.roll_topic, 10)
+        # ---- per-address pubs/subs ----
+        self.pos_pubs = {}
+        for addr in self.enabled_addresses:
+            tag = addr.lower()
+            self.pos_pubs[addr] = self.create_publisher(JointState, f'~/pos/addr_{tag}', 10)
+            self.create_subscription(JointState, f'~/cmd/addr_{tag}',
+                                     lambda msg, a=addr: self.roll_cmd_cb(msg, a), qos)
+            self.create_subscription(Int32, f'~/cmd_speed/addr_{tag}',
+                                     lambda msg, a=addr: self.speed_cmd_cb(msg, a), qos)
 
-    ## \brief Callback for roll command messages.
-    #  \param msg The incoming JointState message.
-    def roll_cmd_cb(self, msg):
-        self.last_roll_cmd = msg.header.stamp
-        self.pt25.stop(self.address)
-        self.pt25.set(self.address, msg.position[0] * 180. / math.pi) # radians to degrees
+        # ---- joystick (subscribe once if any axis is configured) ----
+        if any(self.addr_cfg[a]['joy_axis'] >= 0 for a in self.enabled_addresses):
+            self.create_subscription(Joy, joy_topic, self.joy_cb, 10)
+        self.last_joy_speed = {a: 0 for a in self.enabled_addresses}
 
-    ## \brief Callback for speed command messages.Signed speed command in device units: [-80..80]. Negative -> CCW, Positive -> CW, 0 -> stop.
-    #  \param msg The incoming Int32 message.
-    def speed_cmd_cb(self, msg: Int32):
-        speed = int(msg.data)
-        if speed < -80: speed = -80
-        if speed >  80: speed =  80
+        # ---- timers ----
+        self.create_timer(1.0 / poll_rate, self.poll_callback)
+        self.create_timer(1.0, self.settings_retry)
 
-        now = self.get_clock().now()
+        # ---- kick off initialization ----
+        for addr in self.enabled_addresses:
+            self.get_logger().info(f'Querying settings for address {addr}')
+            self._send_bytes(protocol.encode_get_settings(addr))
 
-        # Always allow STOP, but don't spam if we're already stopped
-        if speed == 0:
-            if self.speed != 0:
-                self.pt25.stop(self.address)
-                self.speed = 0
-                self.last_speed_cmd = now
+    # ------------------------------------------------------------------
+    # Command queue: one publish per COMMAND_INTERVAL_S tick
+    # ------------------------------------------------------------------
+
+    def _send_bytes(self, data: bytes):
+        self._cmd_queue.append(data)
+
+    def _drain_queue(self):
+        if not self._cmd_queue:
+            return
+        data = self._cmd_queue.pop(0)
+        pkt = RawPacket()
+        pkt.header.stamp = self.get_clock().now().to_msg()
+        pkt.data = [bytes([b]) for b in data]
+        self._to_device_pub.publish(pkt)
+
+    # ------------------------------------------------------------------
+    # from_device callback — route by response prefix
+    # ------------------------------------------------------------------
+
+    def from_device_cb(self, msg: RawPacket):
+        try:
+            raw = b''.join(msg.data).decode('utf-8', errors='ignore').strip()
+        except Exception:
+            return
+        if len(raw) < 2:
             return
 
-        # If different speed but too soon, drop it (optional: log once)
-        if speed != self.speed and (now - self.last_speed_cmd) < self.min_cmd_duration:
-            self.get_logger().warn('Ignoring speed command: min_cmd_delay not met', throttle_duration_sec=1.0)
+        addr = raw[0]
+        if addr not in self.enabled_addresses:
             return
 
-        # Send to device
-        self.pt25.rotate(self.address, speed)
-        self.speed = speed
-        self.last_speed_cmd = now
+        cmd_char = raw[1]
+        if cmd_char == '?':
+            self._handle_settings(addr, raw)
+        elif cmd_char == 'f':
+            self._handle_poll(addr, raw)
+        # limit-set acks ('d', 'u', 's', 'p', '<', '>') consumed silently
 
-    ## \brief Timer callback for polling the device.
+    # ------------------------------------------------------------------
+    # Settings initialization state machine
+    # ------------------------------------------------------------------
+
+    def _handle_settings(self, addr: str, data: str):
+        s = protocol.decode_settings(data)
+        if s is None:
+            self.get_logger().warn(f'[{addr}] Failed to parse settings: {data!r}')
+            return
+
+        state = self.init_state[addr]
+
+        if state == 0:
+            self.settings[addr] = s
+            self.get_logger().info(
+                f'[{addr}] Settings: {s}')
+            cfg = self.addr_cfg[addr]
+            ccw = cfg['ccw_limit'] if (cfg['ccw_limit'] > 0 and
+                                       cfg['ccw_limit'] > s['factory_ccw_limit']) \
+                  else s['factory_ccw_limit']
+            cw  = cfg['cw_limit']  if (cfg['cw_limit'] > 0 and
+                                       cfg['cw_limit'] < s['factory_cw_limit']) \
+                  else s['factory_cw_limit']
+            self._send_bytes(protocol.encode_set_ccw_limit(addr, ccw))
+            self._send_bytes(protocol.encode_set_cw_limit(addr, cw))
+            self._send_bytes(protocol.encode_get_settings(addr))
+            self.init_state[addr] = 1
+
+        elif state == 1:
+            self.settings[addr] = s
+            self.get_logger().info(
+                f'[{addr}] User limits: ccw={s["user_ccw_limit"]} cw={s["user_cw_limit"]}')
+            self.settings_ready[addr] = True
+            self.init_state[addr] = 2
+            self.get_logger().info(f'[{addr}] Ready')
+
+    def settings_retry(self):
+        for addr in self.enabled_addresses:
+            if not self.settings_ready[addr]:
+                self.get_logger().warn(f'[{addr}] Settings not ready, retrying', once=True)
+                self._send_bytes(protocol.encode_get_settings(addr))
+
+    # ------------------------------------------------------------------
+    # Poll — alternate one address per tick to avoid queue saturation
+    # ------------------------------------------------------------------
+
     def poll_callback(self):
-        self.poll(self.address)
-
-    ## \brief Polls the device and publishes the position.
-    #  \param address The address of the device.
-    def poll(self, address):
-        roll = self.pt25.poll(address)
-        if roll < 0:
-            self.get_logger().warn(f'Invalid position: {roll:.3f}')
+        ready = [a for a in self.enabled_addresses if self.settings_ready[a]]
+        if not ready:
             return
-        roll_msg = JointState()
-        roll_msg.header.stamp = self.get_clock().now().to_msg()
-        roll_msg.header.frame_id = self.roll_frame
-        roll_msg.name = [self.roll_frame]
-        roll_msg.position = [math.pi * roll / 180]
-        roll_msg.velocity = []
-        roll_msg.effort = []
-        self.roll_pub.publish(roll_msg)
+        addr = ready[self.poll_idx % len(ready)]
+        self.poll_idx += 1
+        self._send_bytes(protocol.encode_poll(addr))
 
-## \brief Main function to initialize and spin the ROS node.
+    def _handle_poll(self, addr: str, data: str):
+        if not self.settings_ready[addr]:
+            return
+        degrees = protocol.decode_poll(data, addr, self.settings[addr])
+        if degrees is None:
+            self.get_logger().warn(f'[{addr}] Invalid poll response: {data!r}',
+                                   throttle_duration_sec=2.0)
+            return
+        msg = JointState()
+        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.header.frame_id = self.addr_cfg[addr]['roll_frame']
+        msg.name            = [self.addr_cfg[addr]['roll_frame']]
+        msg.position        = [math.pi * degrees / 180.0]
+        msg.velocity        = []
+        msg.effort          = []
+        self.pos_pubs[addr].publish(msg)
+
+    # ------------------------------------------------------------------
+    # Position command (absolute, radians)
+    # ------------------------------------------------------------------
+
+    def roll_cmd_cb(self, msg: JointState, addr: str):
+        if not self.settings_ready[addr]:
+            return
+        degrees = msg.position[0] * 180.0 / math.pi
+        self._send_bytes(protocol.encode_stop(addr))
+        cmd = protocol.encode_set(addr, degrees, self.settings[addr])
+        if cmd is None:
+            self.get_logger().warn(f'[{addr}] Position {degrees:.2f}° out of range')
+            return
+        self._send_bytes(cmd)
+
+    # ------------------------------------------------------------------
+    # Speed command (signed Int32, −80..80)
+    # ------------------------------------------------------------------
+
+    def speed_cmd_cb(self, msg: Int32, addr: str):
+        if not self.settings_ready[addr]:
+            return
+        self._apply_speed(addr, int(msg.data))
+
+    def _apply_speed(self, addr: str, speed: int):
+        speed = max(-80, min(80, speed))
+        now   = self.get_clock().now()
+
+        if speed == 0:
+            if self.speed[addr] != 0:
+                self._send_bytes(protocol.encode_stop(addr))
+                self.speed[addr] = 0
+                self.last_speed_cmd[addr] = now
+            return
+
+        if speed != self.speed[addr] and \
+                (now - self.last_speed_cmd[addr]) < self.min_cmd_duration:
+            self.get_logger().warn(f'[{addr}] min_cmd_delay not met, ignoring',
+                                   throttle_duration_sec=1.0)
+            return
+
+        spd = protocol.sanitize_speed(abs(speed))
+        if speed < 0:
+            self._send_bytes(protocol.encode_rotate_ccw(addr, spd))
+        else:
+            self._send_bytes(protocol.encode_rotate_cw(addr, spd))
+        self.speed[addr] = speed
+        self.last_speed_cmd[addr] = now
+
+    # ------------------------------------------------------------------
+    # Joystick
+    # ------------------------------------------------------------------
+
+    def joy_cb(self, msg: Joy):
+        for addr in self.enabled_addresses:
+            if not self.settings_ready[addr]:
+                continue
+            axis_idx = self.addr_cfg[addr]['joy_axis']
+            if axis_idx < 0 or axis_idx >= len(msg.axes):
+                continue
+            raw      = msg.axes[axis_idx]
+            deadband = self.addr_cfg[addr]['joy_deadband']
+            max_spd  = self.addr_cfg[addr]['joy_max_speed']
+            if abs(raw) < deadband:
+                raw = 0.0
+            speed = int(round(raw * max_spd))
+            if speed == self.last_joy_speed[addr]:
+                continue
+            self.last_joy_speed[addr] = speed
+            self._apply_speed(addr, speed)
+
+
 def main(args=None):
     rclpy.init(args=args)
-    pt25ros_obj = PT25ROS()
-    rclpy.spin(pt25ros_obj)
-    pt25ros_obj.destroy_node()
+    node = PT25ROS()
+    rclpy.spin(node)
+    node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
