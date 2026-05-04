@@ -1,0 +1,37 @@
+/**:
+  ros__parameters:
+    # --- roship_io serial_connection node ---
+    # Visca is binary (0xFF terminated). The driver handles packet framing
+    # internally, so disable ASCII end-of-frame framing here.
+    serial:
+      port: /dev/ttyUSB0
+      baud_rate: 9600
+      use_end_of_frame_ascii: false
+
+    # --- roship_io udp_connection node (use_serial:=false) ---
+    sock:
+      dst_hosts:
+        - 10.1.20.31
+      dst_ports:
+        - 4016
+      port: 4016
+      buffer_size: 1024
+
+    # --- ros_visca_driver node ---
+    visca_address: 2        # device address nibble (1 = 0x81, factory default)
+    poll_rate: 5.0          # Hz
+    min_cmd_delay: 0.04     # seconds between speed/direction changes
+    default_speed: 6        # Visca deg/s used for Drive Absolute position moves (1-24)
+    joy_topic: /odysseus6k/control/joy/pan_tilt
+
+    pan:
+      roll_frame: pt_axis_a
+      joy_axis: 0
+      joy_max_speed: 40     # Int32 units (maps to ~12 deg/s at Visca scale)
+      joy_deadband: 0.05
+
+    tilt:
+      roll_frame: pt_axis_b
+      joy_axis: 1
+      joy_max_speed: 40
+      joy_deadband: 0.05

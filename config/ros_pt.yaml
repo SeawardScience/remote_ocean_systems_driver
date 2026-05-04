@@ -41,6 +41,6 @@
       ccw_limit: 0
       cw_limit: 0
       roll_frame: pt_axis_b
-      joy_axis: 1            # disabled — responds only to explicit cmd topics
+      joy_axis: 1
       joy_max_speed: 100
       joy_deadband: 0.05
