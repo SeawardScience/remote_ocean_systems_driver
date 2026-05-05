@@ -57,6 +57,27 @@ def encode_drive_absolute(address: int, pan_deg: float, tilt_deg: float,
     return bytes(data)
 
 
+def encode_get_position_limit(address: int, direction: int) -> bytes:
+    """direction: 1 = up/right, 0 = down/left"""
+    return bytes([0x80 | address, 0x09, 0x06, 0x13, direction & 0x0F, 0xFF])
+
+
+def encode_set_position_limit(address: int, direction: int,
+                               pan_deg: float, tilt_deg: float) -> bytes:
+    """direction: 1 = up/right, 0 = down/left"""
+    data = [0x80 | address, 0x01, 0x06, 0x07, 0x00, direction & 0x0F]
+    data.extend(_to_nibbles(deg_to_val(pan_deg)))
+    data.extend(_to_nibbles(deg_to_val(tilt_deg)))
+    data.append(0xFF)
+    return bytes(data)
+
+
+def encode_clear_position_limits(address: int) -> bytes:
+    """Clears both directions; 0x7FFF is the full-range sentinel per OEM docs."""
+    return bytes([0x80 | address, 0x01, 0x06, 0x07, 0x01, 0x00,
+                  0x07, 0x0F, 0x0F, 0x0F, 0x07, 0x0F, 0x0F, 0x0F, 0xFF])
+
+
 def decode_position(packet: bytes, address: int):
     """Parse a complete Visca packet (including 0xFF terminator).
     Returns (pan_deg, tilt_deg) or None if not a position response.

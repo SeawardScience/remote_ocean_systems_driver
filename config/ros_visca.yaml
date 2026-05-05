@@ -35,3 +35,21 @@
       joy_axis: 1
       joy_max_speed: 40
       joy_deadband: 0.05
+
+    home:
+      joy_button: 0     # joystick button index (-1 = disabled)
+      pan_deg: 180.0    # home pan position in degrees (0-360)
+      tilt_deg: 180.0   # home tilt position in degrees (0-360)
+      speed: 6          # VISCA speed for home move (1-24)
+
+    limits:
+      pan_cw_btn:    1      # RightLimit button (-1 to disable)
+      pan_ccw_btn:   2      # LeftLimit button
+      tilt_down_btn: 3      # DownLimit button
+      tilt_up_btn:   4      # UpLimit button
+      clear_btn:     5      # OverrideLimits toggle button
+      pan_cw_deg:   160.0   # CW pan limit in degrees (-1 = read from device, do not override)
+      pan_ccw_deg:  200.0   # CCW pan limit in degrees
+      tilt_up_deg:  160.0   # up tilt limit in degrees
+      tilt_down_deg: 200.0  # down tilt limit in degrees
+
