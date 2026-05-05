@@ -7,6 +7,7 @@ from sensor_msgs.msg import Joy
 from std_msgs.msg import Int32
 from io_interfaces.msg import RawPacket
 import math
+import diagnostic_updater
 from remote_ocean_systems_driver import pt25 as protocol
 
 qos = QoSProfile(depth=5)
@@ -65,6 +66,7 @@ class PT25ROS(Node):
         self.init_state     = {a: 0     for a in self.enabled_addresses}
         self.speed          = {a: -1    for a in self.enabled_addresses}
         self.last_speed_cmd = {a: self.get_clock().now() for a in self.enabled_addresses}
+        self.last_rx_time   = {a: None  for a in self.enabled_addresses}
         self.poll_idx       = 0
 
         # ---- command queue: drained at COMMAND_INTERVAL_S to keep serial_connection happy ----
@@ -93,6 +95,11 @@ class PT25ROS(Node):
         # ---- timers ----
         self.create_timer(1.0 / poll_rate, self.poll_callback)
         self.create_timer(1.0, self.settings_retry)
+
+        # ---- diagnostics ----
+        self._diag = diagnostic_updater.Updater(self)
+        self._diag.setHardwareID('ros_pt')
+        self._diag.add('Comms', self._diag_comms)
 
         # ---- kick off initialization ----
         for addr in self.enabled_addresses:
@@ -131,6 +138,7 @@ class PT25ROS(Node):
         if addr not in self.enabled_addresses:
             return
 
+        self.last_rx_time[addr] = self.get_clock().now()
         cmd_char = raw[1]
         if cmd_char == '?':
             self._handle_settings(addr, raw)
@@ -279,6 +287,31 @@ class PT25ROS(Node):
                 continue
             self.last_joy_speed[addr] = speed
             self._apply_speed(addr, speed)
+
+
+    # ------------------------------------------------------------------
+    # Diagnostics
+    # ------------------------------------------------------------------
+
+    def _diag_comms(self, stat: diagnostic_updater.DiagnosticStatusWrapper):
+        now = self.get_clock().now()
+        timeout = rclpy.duration.Duration(seconds=5.0)
+        all_ok = True
+        for addr in self.enabled_addresses:
+            if self.last_rx_time[addr] is None:
+                stat.add(f'addr_{addr}', 'no response')
+                all_ok = False
+            elif (now - self.last_rx_time[addr]) > timeout:
+                elapsed = (now - self.last_rx_time[addr]).nanoseconds / 1e9
+                stat.add(f'addr_{addr}', f'stale {elapsed:.1f}s')
+                all_ok = False
+            else:
+                stat.add(f'addr_{addr}', 'ok')
+        if all_ok:
+            stat.summary(diagnostic_updater.DiagnosticStatus.OK, 'Communicating')
+        else:
+            stat.summary(diagnostic_updater.DiagnosticStatus.WARN, 'No device detected')
+        return stat
 
 
 def main(args=None):

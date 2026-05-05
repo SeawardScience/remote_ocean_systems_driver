@@ -130,6 +130,7 @@ class AccuPositionerVisca(Node):
         # ---- queues --------------------------------------------------------
         self._rx_buffer    = bytearray()
         self._cmd_queue    = []
+        self._last_rx_time = None
         # tracks inquiry type for each pending response: 'position'|'limit_up'|'limit_down'
         self._inquiry_queue = deque()
 
@@ -143,7 +144,6 @@ class AccuPositionerVisca(Node):
         self._pan_pub  = self.create_publisher(JointState, '~/pos/addr_a', 10)
         self._tilt_pub = self.create_publisher(JointState, '~/pos/addr_b', 10)
 
-        self._poll_count = 0
 
         # ---- command subscribers -------------------------------------------
         self.create_subscription(JointState, '~/cmd/addr_a',
@@ -171,6 +171,7 @@ class AccuPositionerVisca(Node):
 
         self._diag = diagnostic_updater.Updater(self)
         self._diag.setHardwareID(f'accu_positioner_visca addr={self._addr}')
+        self._diag.add('Comms', self._diag_comms)
         self._diag.add('Position Limits', self._limits_diagnostic)
 
         self.get_logger().info(
@@ -208,6 +209,7 @@ class AccuPositionerVisca(Node):
             raw = b''.join(msg.data)
         except Exception:
             return
+        self._last_rx_time = self.get_clock().now()
         self._rx_buffer.extend(raw)
         while 0xFF in self._rx_buffer:
             idx = self._rx_buffer.index(0xFF)
@@ -218,7 +220,9 @@ class AccuPositionerVisca(Node):
     def _handle_packet(self, data: bytes):
         result = protocol.decode_position(data, self._addr)
         if result is not None:
-            itype = self._inquiry_queue.popleft() if self._inquiry_queue else 'position'
+            if not self._inquiry_queue:
+                return
+            itype = self._inquiry_queue.popleft()
             if itype == 'position':
                 self._handle_position(*result)
             elif itype == 'limit_up':
@@ -262,10 +266,6 @@ class AccuPositionerVisca(Node):
 
     def _poll_callback(self):
         self._send_inquiry(protocol.encode_get_position(self._addr), 'position')
-        self._poll_count += 1
-        if self._poll_count % 10 == 0:
-            self._send_inquiry(protocol.encode_get_position_limit(self._addr, 1), 'limit_up')
-            self._send_inquiry(protocol.encode_get_position_limit(self._addr, 0), 'limit_down')
 
     def _settings_retry(self):
         if not self.init_ready:
@@ -315,10 +315,10 @@ class AccuPositionerVisca(Node):
                 pan_speed = 0
         if self.tilt_pos_deg is not None:
             if tilt_speed > 0 and self._lim_tilt_up is not None \
-                    and self.tilt_pos_deg <= self._lim_tilt_up:
+                    and self.tilt_pos_deg >= self._lim_tilt_up:
                 tilt_speed = 0
             elif tilt_speed < 0 and self._lim_tilt_down is not None \
-                    and self.tilt_pos_deg >= self._lim_tilt_down:
+                    and self.tilt_pos_deg <= self._lim_tilt_down:
                 tilt_speed = 0
         return pan_speed, tilt_speed
 
@@ -358,27 +358,27 @@ class AccuPositionerVisca(Node):
 
     def _handle_limit_response(self, direction: int, pan_deg: float, tilt_deg: float):
         label = 'up/right' if direction == 1 else 'down/left'
-        self.get_logger().info(
-            f'Device limits {label}: pan={pan_deg:.1f}° tilt={tilt_deg:.1f}°')
+        # self.get_logger().info(
+        #     f'Device limits {label}: pan={pan_deg:.1f}° tilt={tilt_deg:.1f}°')
         self._updating_from_device = True
         try:
             updates = []
             if direction == 1:
-                self._lim_pan_cw  = pan_deg
-                self._lim_tilt_up = tilt_deg
                 if self.get_parameter('limits.pan_cw_deg').value < 0:
+                    self._lim_pan_cw = pan_deg
                     updates.append(Parameter('limits.pan_cw_deg',
                                              Parameter.Type.DOUBLE, pan_deg))
                 if self.get_parameter('limits.tilt_up_deg').value < 0:
+                    self._lim_tilt_up = tilt_deg
                     updates.append(Parameter('limits.tilt_up_deg',
                                              Parameter.Type.DOUBLE, tilt_deg))
             else:
-                self._lim_pan_ccw   = pan_deg
-                self._lim_tilt_down = tilt_deg
                 if self.get_parameter('limits.pan_ccw_deg').value < 0:
+                    self._lim_pan_ccw = pan_deg
                     updates.append(Parameter('limits.pan_ccw_deg',
                                              Parameter.Type.DOUBLE, pan_deg))
                 if self.get_parameter('limits.tilt_down_deg').value < 0:
+                    self._lim_tilt_down = tilt_deg
                     updates.append(Parameter('limits.tilt_down_deg',
                                              Parameter.Type.DOUBLE, tilt_deg))
             if updates:
@@ -442,6 +442,19 @@ class AccuPositionerVisca(Node):
         self._limits_cleared = False
         self.get_logger().info('Position limits restored')
         self._diag.force_update()
+
+    def _diag_comms(self, stat: diagnostic_updater.DiagnosticStatusWrapper):
+        now = self.get_clock().now()
+        timeout = rclpy.duration.Duration(seconds=5.0)
+        if self._last_rx_time is None:
+            stat.summary(diagnostic_updater.DiagnosticStatus.WARN, 'No device detected')
+        elif (now - self._last_rx_time) > timeout:
+            elapsed = (now - self._last_rx_time).nanoseconds / 1e9
+            stat.summary(diagnostic_updater.DiagnosticStatus.WARN,
+                         f'No device detected — last rx {elapsed:.1f}s ago')
+        else:
+            stat.summary(diagnostic_updater.DiagnosticStatus.OK, 'Communicating')
+        return stat
 
     def _limits_diagnostic(self, stat):
         if not self.init_ready:
@@ -516,29 +529,22 @@ class AccuPositionerVisca(Node):
 
         self._last_joy_buttons = buttons
 
-        # axis speed control
+        # axis speed control — always call _apply_speed so the clamp re-evaluates
+        # position on every joystick tick even when the commanded speed is unchanged
         new_pan  = self.pan_speed
         new_tilt = self.tilt_speed
-        changed  = False
 
         if 0 <= self._pan_joy_axis < len(msg.axes):
             raw = msg.axes[self._pan_joy_axis]
-            spd = int(round((raw if abs(raw) >= self._pan_deadband else 0.0) * self._pan_joy_max))
-            if spd != self.last_joy_pan:
-                self.last_joy_pan = spd
-                new_pan = spd
-                changed = True
+            new_pan = int(round((raw if abs(raw) >= self._pan_deadband else 0.0) * self._pan_joy_max))
+            self.last_joy_pan = new_pan
 
         if 0 <= self._tilt_joy_axis < len(msg.axes):
             raw = msg.axes[self._tilt_joy_axis]
-            spd = int(round((raw if abs(raw) >= self._tilt_deadband else 0.0) * self._tilt_joy_max))
-            if spd != self.last_joy_tilt:
-                self.last_joy_tilt = spd
-                new_tilt = spd
-                changed = True
+            new_tilt = int(round((raw if abs(raw) >= self._tilt_deadband else 0.0) * self._tilt_joy_max))
+            self.last_joy_tilt = new_tilt
 
-        if changed:
-            self._apply_speed(new_pan, new_tilt)
+        self._apply_speed(new_pan, new_tilt)
 
 
 def main(args=None):
