@@ -87,8 +87,8 @@ class PT25ROS(Node):
             self.create_subscription(Int32, f'~/cmd_speed/addr_{tag}',
                                      lambda msg, a=addr: self.speed_cmd_cb(msg, a), qos)
 
-        # ---- joystick (subscribe once if any axis is configured) ----
-        if any(self.addr_cfg[a]['joy_axis'] >= 0 for a in self.enabled_addresses):
+        # ---- joystick (subscribe once if any axis is configured and topic is set) ----
+        if joy_topic and any(self.addr_cfg[a]['joy_axis'] >= 0 for a in self.enabled_addresses):
             self.create_subscription(Joy, joy_topic, self.joy_cb, 10)
         self.last_joy_speed = {a: 0 for a in self.enabled_addresses}
 

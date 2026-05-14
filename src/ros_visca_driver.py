@@ -49,6 +49,7 @@ class AccuPositionerVisca(Node):
         self.declare_parameter('poll_rate',         5.0)
         self.declare_parameter('min_cmd_delay',     0.04)
         self.declare_parameter('default_speed',     6)
+        self.declare_parameter('cmd_rate',          4.0)
         self.declare_parameter('joy_topic',         '/joy')
 
         self.declare_parameter('pan.roll_frame',    'pt_axis_a')
@@ -83,6 +84,7 @@ class AccuPositionerVisca(Node):
         poll_rate          = self.get_parameter('poll_rate').value
         min_cmd_delay      = self.get_parameter('min_cmd_delay').value
         self._default_spd  = self.get_parameter('default_speed').value
+        cmd_rate           = self.get_parameter('cmd_rate').value
         joy_topic          = self.get_parameter('joy_topic').value
 
         self._pan_frame     = self.get_parameter('pan.roll_frame').value
@@ -119,6 +121,8 @@ class AccuPositionerVisca(Node):
         self.last_joy_tilt     = 0
         self._last_joy_buttons = []
 
+        self._pending_combined_cmd = None   # (pan_deg, tilt_deg) or None
+
         # limit state
         self._lim_pan_cw       = None   # degrees; None = unknown
         self._lim_pan_ccw      = None
@@ -135,6 +139,7 @@ class AccuPositionerVisca(Node):
         self._inquiry_queue = deque()
 
         self.create_timer(COMMAND_INTERVAL_S, self._drain_queue)
+        self.create_timer(1.0 / cmd_rate, self._combined_cmd_dispatch)
 
         # ---- transport -----------------------------------------------------
         self._to_device_pub = self.create_publisher(RawPacket, '~/connection/to_device', 10)
@@ -146,6 +151,8 @@ class AccuPositionerVisca(Node):
 
 
         # ---- command subscribers -------------------------------------------
+        self.create_subscription(JointState, '~/cmd',
+                                 self._combined_cmd_cb, qos)
         self.create_subscription(JointState, '~/cmd/addr_a',
                                  lambda m: self._roll_cmd_cb(m, 'pan'), qos)
         self.create_subscription(JointState, '~/cmd/addr_b',
@@ -162,8 +169,8 @@ class AccuPositionerVisca(Node):
         has_limit_btns = any(b >= 0 for b in [
             self._lim_pan_cw_btn, self._lim_pan_ccw_btn,
             self._lim_tilt_down_btn, self._lim_tilt_up_btn, self._lim_clear_btn])
-        if self._pan_joy_axis >= 0 or self._tilt_joy_axis >= 0 \
-                or self._home_joy_button >= 0 or has_limit_btns:
+        if joy_topic and (self._pan_joy_axis >= 0 or self._tilt_joy_axis >= 0 \
+                or self._home_joy_button >= 0 or has_limit_btns):
             self.create_subscription(Joy, joy_topic, self._joy_cb, 10)
 
         self.create_timer(1.0 / poll_rate, self._poll_callback)
@@ -287,6 +294,25 @@ class AccuPositionerVisca(Node):
             pan_deg  = self.pan_pos_deg if self.pan_pos_deg is not None else FALLBACK_DEG
             tilt_deg = deg
         self._send_bytes(protocol.encode_cancel(self._addr))
+        self._send_bytes(protocol.encode_drive_absolute(
+            self._addr, pan_deg, tilt_deg, self._default_spd, self._default_spd))
+
+    def _combined_cmd_cb(self, msg: JointState):
+        if not self.init_ready:
+            return
+        if len(msg.position) < 2:
+            return
+        self._pending_combined_cmd = (
+            math.degrees(msg.position[0]),
+            math.degrees(msg.position[1]),
+        )
+
+    def _combined_cmd_dispatch(self):
+        if self._pending_combined_cmd is None:
+            return
+        pan_deg, tilt_deg = self._pending_combined_cmd
+        self._pending_combined_cmd = None
+        self._cmd_queue.clear()
         self._send_bytes(protocol.encode_drive_absolute(
             self._addr, pan_deg, tilt_deg, self._default_spd, self._default_spd))
 
