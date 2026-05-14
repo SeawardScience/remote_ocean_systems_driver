@@ -301,29 +301,7 @@ class AccuPositionerVisca(Node):
         else:
             self._apply_speed(self.pan_speed, speed)
 
-    def _clamp_to_limits(self, pan_speed: int, tilt_speed: int):
-        # Device firmware does not enforce position limits on open-loop commands.
-        # Positive speed = right/up = decreasing degrees on this device.
-        if self._limits_cleared or not self.init_ready:
-            return pan_speed, tilt_speed
-        if self.pan_pos_deg is not None:
-            if pan_speed > 0 and self._lim_pan_cw is not None \
-                    and self.pan_pos_deg <= self._lim_pan_cw:
-                pan_speed = 0
-            elif pan_speed < 0 and self._lim_pan_ccw is not None \
-                    and self.pan_pos_deg >= self._lim_pan_ccw:
-                pan_speed = 0
-        if self.tilt_pos_deg is not None:
-            if tilt_speed > 0 and self._lim_tilt_up is not None \
-                    and self.tilt_pos_deg >= self._lim_tilt_up:
-                tilt_speed = 0
-            elif tilt_speed < 0 and self._lim_tilt_down is not None \
-                    and self.tilt_pos_deg <= self._lim_tilt_down:
-                tilt_speed = 0
-        return pan_speed, tilt_speed
-
     def _apply_speed(self, pan_speed: int, tilt_speed: int):
-        pan_speed, tilt_speed = self._clamp_to_limits(pan_speed, tilt_speed)
         if pan_speed == self.pan_speed and tilt_speed == self.tilt_speed:
             return
         now = self.get_clock().now()
@@ -529,8 +507,6 @@ class AccuPositionerVisca(Node):
 
         self._last_joy_buttons = buttons
 
-        # axis speed control — always call _apply_speed so the clamp re-evaluates
-        # position on every joystick tick even when the commanded speed is unchanged
         new_pan  = self.pan_speed
         new_tilt = self.tilt_speed
 
