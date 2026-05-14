@@ -31,6 +31,8 @@
         namespace="$(var vessel_ns)/control/tilt"
         output="screen">
     <param from="$(find-pkg-share remote_ocean_systems_driver)/config/ros_visca.yaml"/>
+    <param name="pos_topic" value="/$(var vessel_ns)/control/pan_tilt/joint_states/resp"/>
+    <param name="cmd_topic" value="/$(var vessel_ns)/control/pan_tilt/joint_states/cmd"/>
   </node>
 
 </launch>

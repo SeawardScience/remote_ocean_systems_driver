@@ -51,6 +51,8 @@ class AccuPositionerVisca(Node):
         self.declare_parameter('default_speed',     6)
         self.declare_parameter('cmd_rate',          4.0)
         self.declare_parameter('joy_topic',         '/joy')
+        self.declare_parameter('pos_topic',         'pan_tilt/joint_states/resp')
+        self.declare_parameter('cmd_topic',         'pan_tilt/joint_states/cmd')
 
         self.declare_parameter('pan.roll_frame',    'pt_axis_a')
         self.declare_parameter('pan.joy_axis',       0)
@@ -86,6 +88,8 @@ class AccuPositionerVisca(Node):
         self._default_spd  = self.get_parameter('default_speed').value
         cmd_rate           = self.get_parameter('cmd_rate').value
         joy_topic          = self.get_parameter('joy_topic').value
+        pos_topic          = self.get_parameter('pos_topic').value
+        cmd_topic          = self.get_parameter('cmd_topic').value
 
         self._pan_frame     = self.get_parameter('pan.roll_frame').value
         self._pan_joy_axis  = self.get_parameter('pan.joy_axis').value
@@ -146,13 +150,10 @@ class AccuPositionerVisca(Node):
         self.create_subscription(RawPacket, '~/connection/from_device', self.from_device_cb, 10)
 
         # ---- position publishers -------------------------------------------
-        self._pan_pub  = self.create_publisher(JointState, '~/pos/addr_a', 10)
-        self._tilt_pub = self.create_publisher(JointState, '~/pos/addr_b', 10)
-
+        self._pos_pub = self.create_publisher(JointState, pos_topic, 10)
 
         # ---- command subscribers -------------------------------------------
-        self.create_subscription(JointState, '~/cmd',
-                                 self._combined_cmd_cb, qos)
+        self.create_subscription(JointState, cmd_topic, self._combined_cmd_cb, qos)
         self.create_subscription(JointState, '~/cmd/addr_a',
                                  lambda m: self._roll_cmd_cb(m, 'pan'), qos)
         self.create_subscription(JointState, '~/cmd/addr_b',
@@ -251,21 +252,12 @@ class AccuPositionerVisca(Node):
 
         self.pan_pos_deg  = pan_deg
         self.tilt_pos_deg = tilt_deg
-        now = self.get_clock().now().to_msg()
 
-        pan_msg = JointState()
-        pan_msg.header.stamp    = now
-        pan_msg.header.frame_id = self._pan_frame
-        pan_msg.name            = [self._pan_frame]
-        pan_msg.position        = [math.radians(pan_deg)]
-        self._pan_pub.publish(pan_msg)
-
-        tilt_msg = JointState()
-        tilt_msg.header.stamp    = now
-        tilt_msg.header.frame_id = self._tilt_frame
-        tilt_msg.name            = [self._tilt_frame]
-        tilt_msg.position        = [math.radians(tilt_deg)]
-        self._tilt_pub.publish(tilt_msg)
+        msg = JointState()
+        msg.header.stamp    = self.get_clock().now().to_msg()
+        msg.name            = [self._pan_frame, self._tilt_frame]
+        msg.position        = [math.radians(pan_deg), math.radians(tilt_deg)]
+        self._pos_pub.publish(msg)
 
     # ------------------------------------------------------------------
     # Poll
